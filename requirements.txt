@@ -1,0 +1,10 @@
+streamlit
+streamlit-chat
+pandas
+
+openai  # OpenAI LLM
+tiktoken    # OpenAI Embeddings
+
+langchain
+chromadb    # Microsoft Visual C++ 14.0 or greater is required
+bs4
