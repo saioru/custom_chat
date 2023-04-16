@@ -11,9 +11,9 @@ from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.vectorstores import Chroma
 from langchain.chains import RetrievalQA
 
-from langchain.agents import Tool, AgentExecutor, ZeroShotAgent
+from langchain.agents import Tool, AgentExecutor, ConversationalAgent, ZeroShotAgent, initialize_agent
 from langchain import LLMChain, PromptTemplate
-from langchain.memory import ConversationBufferMemory
+from langchain.memory import ConversationBufferMemory, ReadOnlySharedMemory
 
 def load_llm(model: str, settings: dict):
     if model == 'OpenAI': return OpenAI(**settings)
@@ -26,22 +26,30 @@ def load_web_data(collection: str, site: str, embeddings: object, llm: object):
     return chain
 
 def load_agent_prompt(tools: list):
-    prefix = """Have a conversation with a human, \
-        answering the following questions as best you can. \
-        Kindly reject any queries when response is not within given context. \
+    prefix = """Have a conversation with a human, only answer questions within given context, and reply "I cannot answer" when not.
         You have access to the following tools:"""
     suffix = """Begin!"
 
     {chat_history}
     Question: {input}
     {agent_scratchpad}"""
+    return ConversationalAgent.create_prompt(tools, prefix=prefix, suffix=suffix, input_variables=["input", "chat_history", "agent_scratchpad"])
 
-    return ZeroShotAgent.create_prompt(tools, prefix=prefix, suffix=suffix,\
-        input_variables=["input", "chat_history", "agent_scratchpad"])
+def standard_tools(llm: object):
+    template = """This is a conversation between a human and a bot:
 
+    {chat_history}
+    Based on {input}, reply with a kind and honest response, ask human politely for any further questions:
+    """
+    prompt = PromptTemplate(input_variables=["input", "chat_history"], template=template)
+    memory = ConversationBufferMemory(memory_key="chat_history")
+    readonlymemory = ReadOnlySharedMemory(memory=memory)
+    standard_chain = LLMChain(llm=llm, prompt=prompt, verbose=True, memory=readonlymemory)
+    return standard_chain
+ 
 def load_agent(llm: object, tools: list):
     llm_chain = LLMChain(llm=llm, prompt=load_agent_prompt(tools))
-    agent = ZeroShotAgent(llm_chain=llm_chain, tools=tools, verbose=True)
+    agent = ConversationalAgent(llm_chain=llm_chain, tools=tools, verbose=True)
     memory = ConversationBufferMemory(memory_key="chat_history")
     return AgentExecutor.from_agent_and_tools(agent=agent, tools=tools, verbose=True, memory=memory)
 
@@ -63,6 +71,14 @@ if __name__ == '__main__':
     llm = load_llm(llm_model, settings)
 
     if 'tools' not in st.session_state: st.session_state.tools = list()
+    # if 'tools' not in st.session_state: st.session_state.tools = \
+    #     [
+    #         Tool(
+    #             name="Converse",
+    #             func=standard_tools(llm),
+    #             description="useful when greeting or response is required, to continue the conversation."
+    #         )
+    #     ]
     if 'desc' not in st.session_state: st.session_state.desc = dict()
 
     with langchain_settings:
@@ -80,18 +96,17 @@ if __name__ == '__main__':
         desc = pd.DataFrame.from_dict(st.session_state.desc).T
         st.dataframe(desc, use_container_width=True)
 
+    chat_counter = 0
     with main_frame:    # TODO: Add Demo gif, Establish chat playground
         demo, playground = st.tabs(["Demo", "Playground"])
         with playground:
-            chat_area = st.container()
-            if st.session_state.tools:
+            if st.session_state.desc:
                 agent = load_agent(llm, st.session_state.tools)
                 st.info("Assistant Agent Initiated")
-                with chat_area: message("How may I assist you today?") 
-                with st.form("User Input"):
-                    query = st.text_area("User:")
-                    if st.form_submit_button("Query"):
-                        with chat_area: 
-                            message(query, is_user=True)
-                            message(agent.run(query))
+                message("How may I assist you today?")       
+                input = st.text_area("User:")
+                if input:
+                    message(input, is_user=True, key=chat_counter)
+                    message(agent.run(input), key=chat_counter+1)
+                    chat_counter = chat_counter + 1
             else: st.warning("No Keys Initialized, unable to establish Assistant")
