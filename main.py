@@ -31,6 +31,7 @@ def load_agent_prompt(tools: list):
     suffix = """Begin!"
 
     {chat_history}
+    
     Question: {input}
     {agent_scratchpad}"""
     return ConversationalAgent.create_prompt(tools, prefix=prefix, suffix=suffix, input_variables=["input", "chat_history", "agent_scratchpad"])
