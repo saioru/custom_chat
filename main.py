@@ -11,9 +11,9 @@ from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.vectorstores import Chroma
 from langchain.chains import RetrievalQA
 
-from langchain.agents import Tool, AgentExecutor, ConversationalAgent, ZeroShotAgent, initialize_agent
-from langchain import LLMChain, PromptTemplate
-from langchain.memory import ConversationBufferMemory, ReadOnlySharedMemory
+from langchain.agents import Tool, AgentExecutor, ConversationalAgent
+from langchain import LLMChain
+from langchain.memory import ConversationBufferMemory
 
 def load_llm(model: str, settings: dict):
     if model == 'OpenAI': return OpenAI(**settings)
@@ -34,18 +34,6 @@ def load_agent_prompt(tools: list):
     Question: {input}
     {agent_scratchpad}"""
     return ConversationalAgent.create_prompt(tools, prefix=prefix, suffix=suffix, input_variables=["input", "chat_history", "agent_scratchpad"])
-
-def standard_tools(llm: object):
-    template = """This is a conversation between a human and a bot:
-
-    {chat_history}
-    Based on {input}, reply with a kind and honest response, ask human politely for any further questions:
-    """
-    prompt = PromptTemplate(input_variables=["input", "chat_history"], template=template)
-    memory = ConversationBufferMemory(memory_key="chat_history")
-    readonlymemory = ReadOnlySharedMemory(memory=memory)
-    standard_chain = LLMChain(llm=llm, prompt=prompt, verbose=True, memory=readonlymemory)
-    return standard_chain
  
 def load_agent(llm: object, tools: list):
     llm_chain = LLMChain(llm=llm, prompt=load_agent_prompt(tools))
@@ -71,14 +59,6 @@ if __name__ == '__main__':
     llm = load_llm(llm_model, settings)
 
     if 'tools' not in st.session_state: st.session_state.tools = list()
-    # if 'tools' not in st.session_state: st.session_state.tools = \
-    #     [
-    #         Tool(
-    #             name="Converse",
-    #             func=standard_tools(llm),
-    #             description="useful when greeting or response is required, to continue the conversation."
-    #         )
-    #     ]
     if 'desc' not in st.session_state: st.session_state.desc = dict()
 
     with langchain_settings:
