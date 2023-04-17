@@ -22,8 +22,7 @@ def load_web_data(collection: str, site: str, embeddings: object, llm: object):
     docs = WebBaseLoader(site).load()
     context = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0).split_documents(docs)
     vec_db = Chroma.from_documents(context, embeddings, collection_name=collection)
-    chain = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=vec_db.as_retriever())
-    return chain
+    return RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=vec_db.as_retriever())
 
 def load_agent_prompt(tools: list):
     prefix = """Have a conversation with a human, only answer questions within given context, and reply "I cannot answer" when not.
@@ -31,7 +30,7 @@ def load_agent_prompt(tools: list):
     suffix = """Begin!"
 
     {chat_history}
-    
+
     Question: {input}
     {agent_scratchpad}"""
     return ConversationalAgent.create_prompt(tools, prefix=prefix, suffix=suffix, input_variables=["input", "chat_history", "agent_scratchpad"])
