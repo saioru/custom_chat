@@ -15,6 +15,8 @@ from langchain.agents import Tool, AgentExecutor, ConversationalAgent
 from langchain import LLMChain
 from langchain.memory import ConversationBufferMemory
 
+from agent_customizer import CustomOutputParser
+
 def load_llm(model: str, settings: dict):
     if model == 'OpenAI': return OpenAI(**settings)
 
@@ -22,23 +24,30 @@ def load_web_data(collection: str, site: str, embeddings: object, llm: object):
     docs = WebBaseLoader(site).load()
     context = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0).split_documents(docs)
     vec_db = Chroma.from_documents(context, embeddings, collection_name=collection)
-    return RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=vec_db.as_retriever())
+    return RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=vec_db.as_retriever(search_kwargs={"k": 1}))
 
-def load_agent_prompt(tools: list):
-    prefix = """Have a conversation with a human, only answer questions within given context, and reply "I cannot answer" when not.
-        You have access to the following tools:"""
+    # return ConversationalRetrievalChain.from_llm(llm=llm, retriever=vec_db.as_retriever(search_kwargs={"k": 2}))
+
+def load_agent(llm: object, tools: list):
+    prefix = """
+        Have a conversation with a human, only answer questions within the given context and previous question as reference, 
+
+        ask for clarification if necessary, otherwise say "I don't know"
+        
+        You have access to the following tools:
+        """
     suffix = """Begin!"
-
     {chat_history}
-
     Question: {input}
     {agent_scratchpad}"""
-    return ConversationalAgent.create_prompt(tools, prefix=prefix, suffix=suffix, input_variables=["input", "chat_history", "agent_scratchpad"])
- 
-def load_agent(llm: object, tools: list):
-    llm_chain = LLMChain(llm=llm, prompt=load_agent_prompt(tools))
-    agent = ConversationalAgent(llm_chain=llm_chain, tools=tools, verbose=True)
+
+    prompt = ConversationalAgent.create_prompt(tools, prefix=prefix, suffix=suffix, input_variables=["input", "chat_history", "agent_scratchpad"])
+
     memory = ConversationBufferMemory(memory_key="chat_history")
+    llm_chain = LLMChain(llm=llm, prompt=prompt)    #, memory=ReadOnlySharedMemory(memory=memory))
+    tool_names = [tool.name for tool in tools]
+    agent = ConversationalAgent(llm_chain=llm_chain, stop=["\nObservation:"], allowed_tools=tool_names)
+    # agent = ConversationalAgent(llm_chain=llm_chain, output_parser=CustomOutputParser(), stop=["\nObservation:"], allowed_tools=tool_names)
     return AgentExecutor.from_agent_and_tools(agent=agent, tools=tools, verbose=True, memory=memory)
 
 if __name__ == '__main__':
